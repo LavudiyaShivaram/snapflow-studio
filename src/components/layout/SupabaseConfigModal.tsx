@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, Copy, Database, ShieldCheck, FileCode, CheckCircle2 } from 'lucide-react';
+import { X, Check, Copy, Database, ShieldCheck, FileCode, CheckCircle2, ExternalLink } from 'lucide-react';
 import { getSupabaseConfigStatus } from '../../lib/supabase';
 
 interface SupabaseConfigModalProps {
@@ -168,36 +168,67 @@ VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_..."
           )}
 
           {activeTab === 'schema' && (
-            <div className="space-y-3">
-              <p className="text-zinc-300 text-xs">
-                Real version-controlled SQL migrations are located in your repository:
-              </p>
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-zinc-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold text-amber-300 text-xs">
+                    Apply Schema to Live Supabase Database
+                  </span>
+                  <a
+                    href="https://supabase.com/dashboard/project/hktlsqfsmpdniuqktjyj/sql/new"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 underline font-mono"
+                  >
+                    <span>Open Supabase SQL Editor</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <p className="text-[11px] text-zinc-400 leading-relaxed mb-3">
+                  To complete the database connection, run the combined SQL migration in your Supabase SQL editor. This provisions all 31 tables, foreign keys, audit triggers, Row Level Security policies, and the atomic studio setup RPC.
+                </p>
+                <button
+                  onClick={() => handleCopy(`-- Run in Supabase SQL Editor:
+-- File: supabase/combined_migration.sql
+-- All 3 migrations (Core Schema, RLS Policies, Secure Onboarding RPC)
+` + envSnippet)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs transition-colors"
+                >
+                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  <span>{copied ? 'Migration Path Copied!' : 'Copy Migration Instructions & References'}</span>
+                </button>
+              </div>
+
               <div className="space-y-2 font-mono text-[11px]">
+                <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-zinc-200">
+                    <FileCode className="w-4 h-4 text-emerald-400" />
+                    <span>supabase/combined_migration.sql</span>
+                  </div>
+                  <span className="text-emerald-400 text-[10px]">Consolidated (1,872 lines)</span>
+                </div>
                 <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-zinc-200">
                     <FileCode className="w-4 h-4 text-amber-400" />
                     <span>supabase/migrations/20261025000001_core_schema.sql</span>
                   </div>
-                  <span className="text-zinc-400 text-[10px]">31 Tables & FKs</span>
+                  <span className="text-zinc-400 text-[10px]">31 Tables & Audit Triggers</span>
                 </div>
                 <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-zinc-200">
                     <FileCode className="w-4 h-4 text-amber-400" />
                     <span>supabase/migrations/20261025000002_rls_security_policies.sql</span>
                   </div>
-                  <span className="text-zinc-400 text-[10px]">RLS & Storage</span>
+                  <span className="text-zinc-400 text-[10px]">Multi-Tenant RLS & Storage</span>
                 </div>
                 <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-zinc-200">
                     <FileCode className="w-4 h-4 text-amber-400" />
-                    <span>supabase/seed.sql</span>
+                    <span>supabase/migrations/20261025000003_secure_tenant_onboarding.sql</span>
                   </div>
-                  <span className="text-zinc-400 text-[10px]">Demo Studios</span>
+                  <span className="text-zinc-400 text-[10px]">Atomic RPC Onboarding</span>
                 </div>
               </div>
-              <p className="text-[11px] text-zinc-400">
-                To apply them, run the SQL queries in your Supabase Dashboard SQL Editor in sequential order.
-              </p>
             </div>
           )}
 

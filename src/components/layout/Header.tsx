@@ -7,6 +7,7 @@ import { getSupabaseConfigStatus } from '../../lib/supabase';
 interface HeaderProps {
   onOpenConfigModal: () => void;
   onOpenOnboarding: () => void;
+  onOpenWorkspaceModal?: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }
@@ -14,6 +15,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   onOpenConfigModal,
   onOpenOnboarding,
+  onOpenWorkspaceModal,
   activeTab,
   setActiveTab,
 }) => {
@@ -143,7 +145,19 @@ export const Header: React.FC<HeaderProps> = ({
                   ))}
                 </div>
 
-                <div className="border-t border-zinc-800 my-1 pt-1">
+                <div className="border-t border-zinc-800 my-1 pt-1 space-y-1">
+                  {onOpenWorkspaceModal && (
+                    <button
+                      onClick={() => {
+                        setTenantMenuOpen(false);
+                        onOpenWorkspaceModal();
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs text-zinc-300 hover:bg-zinc-800 transition-colors"
+                    >
+                      <span>View All Workspaces</span>
+                      <span className="text-[10px] font-mono text-zinc-500">({tenants.length})</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setTenantMenuOpen(false);

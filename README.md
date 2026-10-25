@@ -9,14 +9,11 @@ SnapFlow Studio is a production-grade, multi-tenant SaaS application architected
 SnapFlow Studio uses a **shared PostgreSQL database with tenant isolation enforced at the database engine level via PostgreSQL Row Level Security (RLS)**.
 
 - **Workspace Isolation**: Every business entity (clients, events, sessions, team members, quotations, payments, expenses, deliverables, tasks) is partitioned by `tenant_id`.
-- **Tenant Memberships**: Users belong to multiple photography studios through explicit records in `tenant_members` with granular roles (`owner`, `manager`, `photographer`, `videographer`, `editor`, `freelancer`).
-- **Security Definer Functions**: PostgreSQL functions `public.get_user_tenant_ids()`, `public.is_tenant_member()`, and `public.has_tenant_role()` run with fixed `search_path = public, auth` to prevent search_path injection attacks.
-- **Least-Privilege Authorization**:
-  - **Owners**: Full studio management, team member role assignment, financial payment records, billing, deletion authority.
-  - **Managers**: Event coordination, schedule dispatch, client management, quotation generation.
-  - **Photographers & Videographers**: Assignment call times, event run-of-show briefs, shoot checklists. Financial tables are restricted.
-  - **Editors**: Assigned post-production projects, color notes, media delivery approval.
-  - **Freelancers**: Self-contained assignment view, shoot call requirements, rate confirmation.
+- **Primary Key Suffix Convention**: Every database table features a primary key suffixed with the table name (e.g. `tenant_id`, `client_id`, `event_id`, `tenant_member_id`, `quotation_id`, `payment_id`).
+- **Complete Audit Trail & Soft Delete**: Every table includes `inserted_by`, `inserted_date`, `updated_by`, `updated_date`, `deleted_by`, and `deleted_date`. Hard deletes are strictly blocked via PostgreSQL triggers (`prevent_hard_delete()`).
+- **Tenant Memberships**: Users belong to photography studios through explicit records in `tenant_members` with granular roles (`owner`, `manager`, `photographer`, `videographer`, `editor`, `freelancer`).
+- **Atomic Tenant Onboarding**: The `public.register_studio_workspace(...)` stored procedure handles workspace creation, owner assignment, settings provisioning, and optional team invitations inside an atomic database transaction.
+- **Indian Standard Defaults**: Default currency is Indian Rupee (`INR` / `₹`) and default timezone is Indian Standard Time (`Asia/Kolkata` / IST, UTC+05:30).
 
 ---
 
@@ -25,33 +22,45 @@ SnapFlow Studio uses a **shared PostgreSQL database with tenant isolation enforc
 ```
 ├── supabase/
 │   ├── migrations/
-│   │   ├── 20261025000001_core_schema.sql         # 31 core tables, FKs, constraints, indexes & triggers
-│   │   └── 20261025000002_rls_security_policies.sql # RLS policies, helper functions & storage rules
-│   └── seed.sql                                   # Fictional multi-tenant demonstration data
+│   │   ├── 20261025000001_core_schema.sql             # 31 core tables, FKs, suffixed PKs, audit triggers
+│   │   ├── 20261025000002_rls_security_policies.sql     # RLS policies, helper functions & soft-delete triggers
+│   │   └── 20261025000003_secure_tenant_onboarding.sql # Atomic tenant registration RPC & workspace helpers
+│   └── seed.sql                                       # Fictional multi-tenant demonstration data
 ├── tests/
+│   ├── auth/
+│   │   ├── auth_flows.test.ts                         # Supabase Auth restoration & persona tests
+│   │   └── registration_onboarding.test.ts            # Registration validation, atomic RPC & isolation tests
 │   └── security/
-│       └── rls_isolation.test.ts                  # Vitest suite verifying tenant isolation & RBAC rules
+│       └── rls_isolation.test.ts                      # Tenant isolation, soft-delete & RBAC test suite
 ├── src/
 │   ├── lib/
-│   │   ├── supabase.ts                            # Supabase client initializer & config validator
-│   │   ├── mockData.ts                            # Offline-resilient fallback demonstration data
-│   │   └── types.ts                               # Full TypeScript definitions for all 31 tables
+│   │   ├── supabase.ts                                # Supabase client initializer & config validator
+│   │   ├── mockData.ts                                # Offline-resilient fallback demonstration data
+│   │   └── types.ts                                   # Full TypeScript definitions for all 31 tables
 │   ├── context/
-│   │   ├── AuthContext.tsx                        # Supabase Auth provider, sessions, user profile
-│   │   └── TenantContext.tsx                      # Active studio workspace switcher & tenant state
+│   │   ├── AuthContext.tsx                            # Supabase Auth provider, sessions & email verification
+│   │   └── TenantContext.tsx                          # Active studio workspace switcher & tenant state
 │   ├── components/
-│   │   ├── layout/                                # Sidebar, Topbar contract, Workspace switcher
-│   │   ├── dashboard/                             # Real-time KPIs, revenue vs expense, upcoming shoots
-│   │   ├── calendar/                              # Month/week/day calendar, sessions, conflict detector
-│   │   ├── clients/                               # Client directory, detail modal, notes
-│   │   ├── events/                                # Event detail, multi-ceremony session builder
-│   │   ├── team/                                  # Crew directory, freelancer dispatch, skill tags
-│   │   ├── commercial/                            # Quotation builder, payment ledger, profit calculator
-│   │   ├── production/                            # Post-production pipeline, editing stages, deliverables
-│   │   ├── tasks/                                 # Pre-shoot checklists & reminder workflows
-│   │   ├── reports/                               # Financial reports, booking volume & crew utilization
-│   │   ├── settings/                              # Studio branding, tax rates, team member invites
-│   │   └── onboarding/                            # 6-step guided studio creation wizard
+│   │   ├── auth/
+│   │   │   ├── RegisterPage.tsx                       # Premium public registration & email verification screen
+│   │   │   └── LoginForm.tsx                          # Studio credential sign-in form
+│   │   ├── onboarding/
+│   │   │   └── StudioOnboardingWizard.tsx             # 4-step studio setup wizard with draft preservation
+│   │   ├── tenant/
+│   │   │   └── WorkspaceSelectionModal.tsx            # Multi-workspace switcher & studio selector
+│   │   ├── layout/                                    # 3-Zone Header, Sidebar, Supabase config modal
+│   │   ├── dashboard/                                 # Real-time KPIs, revenue vs expense, upcoming shoots
+│   │   ├── calendar/                                  # Shoots calendar, call times, conflict detector
+│   │   ├── clients/                                   # Client directory & contract notes
+│   │   ├── events/                                    # Multi-ceremony session builder & run-of-show
+│   │   ├── team/                                      # Crew directory, skill tags & dispatch
+│   │   ├── commercial/                                # Quotation builder, payment ledger & profit calculator
+│   │   ├── production/                                # Post-production pipeline & editing stages
+│   │   ├── tasks/                                     # Shoot checklists & equipment reminders
+│   │   ├── reports/                                   # Financial reports, booking volume & crew utilization
+│   │   ├── settings/                                  # Studio branding, tax rates & member invites
+│   │   └── public/
+│   │       └── LandingPage.tsx                        # Public landing page with CTA & tier showcase
 │   └── App.tsx
 ├── .env.example
 ├── package.json
@@ -72,32 +81,16 @@ VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_<your-key>"
 # VITE_SUPABASE_ANON_KEY="eyJhbGciOi..."
 ```
 
-> **Security Note**: Never expose the Supabase `service_role` secret key in client-side code. All client operations run through Supabase Auth and PostgreSQL RLS.
-
 ### Step 2: Apply Database Migrations in Supabase
 In your Supabase project's **SQL Editor**:
-1. Copy and execute `supabase/migrations/20261025000001_core_schema.sql`.
-2. Copy and execute `supabase/migrations/20261025000002_rls_security_policies.sql`.
-3. (Optional for demo) Copy and execute `supabase/seed.sql` to populate sample studios (Royal Wedding Photography, Moments Photography Studio).
+1. Execute `supabase/migrations/20261025000001_core_schema.sql`.
+2. Execute `supabase/migrations/20261025000002_rls_security_policies.sql`.
+3. Execute `supabase/migrations/20261025000003_secure_tenant_onboarding.sql`.
+4. (Optional for demonstration) Execute `supabase/seed.sql` to populate sample studios (Royal Wedding Photography, Moments Photography Studio).
 
-### Step 3: Run Database Security Tests
-Execute the tenant isolation and authorization test suite:
+### Step 3: Run Unit & Security Tests
+Execute the comprehensive test suites:
 ```bash
 npm test
 ```
-All 10 security test scenarios must pass to confirm tenant isolation.
-
----
-
-## 🛡 Verification & Completed Work vs. Manual Configuration
-
-| Component | Status | Location / Details |
-|---|---|---|
-| PostgreSQL Core Schema (31 Tables) | ✅ Completed | `supabase/migrations/20261025000001_core_schema.sql` |
-| Row Level Security (RLS) & Grants | ✅ Completed | `supabase/migrations/20261025000002_rls_security_policies.sql` |
-| Multi-Tenant Seed Script | ✅ Completed | `supabase/seed.sql` |
-| Database Security Test Suite | ✅ Completed (10/10 Passed) | `tests/security/rls_isolation.test.ts` |
-| Client-Side Supabase Integration | ✅ Completed | `src/lib/supabase.ts` |
-| Multi-Studio Workspace Switcher | ✅ Completed | `src/context/TenantContext.tsx` |
-| Supabase Auth & Onboarding Flow | ✅ Completed | `src/components/onboarding/StudioOnboarding.tsx` |
-| External Supabase Cloud Project | ⏳ Required | Connect real Supabase project via `VITE_SUPABASE_URL` |
+All tests verify tenant isolation, soft-delete triggers, email verification states, and atomic studio onboarding.

@@ -4,21 +4,30 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Profile } from '../lib/types';
 import { DEMO_PROFILES } from '../lib/mockData';
 
+export interface VerificationStatus {
+  status: 'idle' | 'verifying' | 'success' | 'error';
+  message?: string;
+}
+
 export interface AuthContextType {
   user: Profile | null;
   supabaseUser: User | null;
   session: Session | null;
   isAuthenticated: boolean;
+  isEmailVerified: boolean;
   loading: boolean;
   isDemoMode: boolean;
   authError: string | null;
+  verificationStatus: VerificationStatus;
   clearAuthError: () => void;
+  dismissVerificationStatus: () => void;
   signInWithEmail: (email: string, password: string) => Promise<{ error?: string }>;
   signUpWithEmail: (
     email: string,
     password: string,
     fullName: string
-  ) => Promise<{ error?: string; requiresEmailConfirmation?: boolean }>;
+  ) => Promise<{ error?: string; requiresEmailConfirmation?: boolean; user?: User | null }>;
+  resendVerificationEmail: (email: string) => Promise<{ error?: string; message?: string }>;
   signOut: () => Promise<void>;
   resetPasswordForEmail: (email: string) => Promise<{ error?: string; message?: string }>;
   updatePassword: (password: string) => Promise<{ error?: string; message?: string }>;
@@ -36,8 +45,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(true);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(!isSupabaseConfigured);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>({
+    status: 'idle',
+  });
 
   const clearAuthError = () => setAuthError(null);
+  const dismissVerificationStatus = () => setVerificationStatus({ status: 'idle' });
+
+  // Compute email verification strictly: never claim verified until confirmed by Supabase or active demo persona
+  const isEmailVerified: boolean = React.useMemo(() => {
+    if (isDemoMode) return true;
+    if (!supabaseUser) return false;
+    // Check official Supabase email confirmation timestamp
+    if (supabaseUser.email_confirmed_at) return true;
+    // Check confirmed_at legacy property
+    if ((supabaseUser as any).confirmed_at) return true;
+    return false;
+  }, [isDemoMode, supabaseUser]);
 
   // Sync profile from Supabase profiles table
   const fetchOrSyncProfile = async (sbUser: User): Promise<Profile> => {
@@ -80,6 +104,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let mounted = true;
+
+    // Check URL parameters for email verification callbacks & error states
+    const checkUrlVerificationTokens = () => {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      const fullUrl = hash || search;
+
+      if (fullUrl) {
+        const params = new URLSearchParams(hash.startsWith('#') ? hash.substring(1) : search);
+        
+        // Handle expired or invalid links
+        const errorDesc = params.get('error_description');
+        const errorCode = params.get('error_code');
+        if (errorDesc || errorCode) {
+          setVerificationStatus({
+            status: 'error',
+            message: decodeURIComponent(errorDesc || 'Verification link is invalid or has expired. Please request a new one.'),
+          });
+          return;
+        }
+
+        // Handle successful email confirmation token
+        const type = params.get('type');
+        if (type === 'signup' || type === 'email_change' || type === 'recovery') {
+          setVerificationStatus({
+            status: 'success',
+            message: 'Email successfully verified! Welcome to SnapFlow Studio.',
+          });
+          // Clean hash from address bar without reloading
+          if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+        }
+      }
+    };
+
+    checkUrlVerificationTokens();
 
     async function initAuth() {
       if (isSupabaseConfigured && supabase) {
@@ -125,7 +186,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initAuth();
 
-    // Listen to real-time auth changes using the official Supabase Auth client
+    // Listen to real-time auth changes using official Supabase Auth client
     if (isSupabaseConfigured && supabase) {
       const {
         data: { subscription },
@@ -229,11 +290,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: string,
     password: string,
     fullName: string
-  ): Promise<{ error?: string; requiresEmailConfirmation?: boolean }> => {
+  ): Promise<{ error?: string; requiresEmailConfirmation?: boolean; user?: User | null }> => {
     setAuthError(null);
 
     if (isSupabaseConfigured && supabase) {
       try {
+        const redirectUrl = `${window.location.origin}/#type=signup`;
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -241,6 +303,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             data: {
               full_name: fullName.trim(),
             },
+            emailRedirectTo: redirectUrl,
           },
         });
 
@@ -249,9 +312,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return { error: error.message };
         }
 
-        // If email confirmation is required, session might be null
+        // If user already registered and confirmed, Supabase might return empty identities
+        if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+          const msg = 'An account with this email address already exists. Please sign in instead.';
+          setAuthError(msg);
+          return { error: msg };
+        }
+
+        // When email confirmation is enabled on Supabase project, session is null
         if (!data.session && data.user) {
-          return { requiresEmailConfirmation: true };
+          setSupabaseUser(data.user);
+          return { requiresEmailConfirmation: true, user: data.user };
         }
 
         if (data.user) {
@@ -262,7 +333,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(profile);
         }
 
-        return {};
+        return { user: data.user };
       } catch (err: any) {
         const msg = err.message || 'An error occurred during registration.';
         setAuthError(msg);
@@ -270,7 +341,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // Demo Mode Registration
+    // Demo Mode Registration (instant simulated active user)
     const newRegId = `usr-${Date.now()}`;
     const regNow = new Date().toISOString();
     const newProfile: Profile = {
@@ -287,7 +358,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setUser(newProfile);
     setIsDemoMode(true);
-    return {};
+    return { requiresEmailConfirmation: false };
+  };
+
+  const resendVerificationEmail = async (email: string): Promise<{ error?: string; message?: string }> => {
+    setAuthError(null);
+    if (!email.trim()) {
+      return { error: 'Please specify the email address to resend confirmation.' };
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.auth.resend({
+          type: 'signup',
+          email: email.trim(),
+          options: {
+            emailRedirectTo: `${window.location.origin}/#type=signup`,
+          },
+        });
+
+        if (error) {
+          return { error: error.message };
+        }
+        return { message: 'A fresh confirmation link has been dispatched to your email.' };
+      } catch (err: any) {
+        return { error: err.message || 'Failed to resend confirmation email.' };
+      }
+    }
+
+    return { message: 'Demo Mode: Verification link resent successfully for ' + email.trim() };
   };
 
   const signOut = async () => {
@@ -311,7 +410,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isSupabaseConfigured && supabase) {
       try {
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}/#type=recovery`,
         });
         if (error) {
           setAuthError(error.message);
@@ -324,8 +423,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return {
-      message:
-        'Demo Mode: Simulated password recovery link issued for ' + email.trim(),
+      message: 'Demo Mode: Simulated password recovery link issued for ' + email.trim(),
     };
   };
 
@@ -360,7 +458,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { error } = await supabase
           .from('profiles')
           .update(updates)
-          .eq('id', supabaseUser.id);
+          .eq('profile_id', supabaseUser.id);
         if (error) return { error: error.message };
       } catch (err: any) {
         return { error: err.message };
@@ -390,11 +488,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    return { error: 'OAuth requires a live connected Supabase project with provider configured.' };
+    return { error: 'Google OAuth requires configuring provider credentials in your connected Supabase dashboard.' };
   };
 
   const switchDemoUser = (profileId: string) => {
-    const target = DEMO_PROFILES.find((p) => p.id === profileId);
+    const target = DEMO_PROFILES.find((p) => p.id === profileId || p.profile_id === profileId);
     if (target) {
       setUser(target);
       setIsDemoMode(true);
@@ -410,12 +508,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         supabaseUser,
         session,
         isAuthenticated: Boolean(user),
+        isEmailVerified,
         loading,
         isDemoMode,
         authError,
+        verificationStatus,
         clearAuthError,
+        dismissVerificationStatus,
         signInWithEmail,
         signUpWithEmail,
+        resendVerificationEmail,
         signOut,
         resetPasswordForEmail,
         updatePassword,

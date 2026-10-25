@@ -21,11 +21,15 @@ import { LoginForm } from '../auth/LoginForm';
 interface LandingPageProps {
   onEnterStudio: () => void;
   onOpenConfig: () => void;
+  onNavigateToRegister?: () => void;
+  onNavigateToLogin?: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onEnterStudio,
   onOpenConfig,
+  onNavigateToRegister,
+  onNavigateToLogin,
 }) => {
   const { user, signInWithEmail, signUpWithEmail, resetPasswordForEmail } = useAuth();
 
@@ -113,8 +117,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
             <button
               onClick={() => {
-                if (user) onEnterStudio();
-                else setAuthModalOpen(true);
+                if (user) {
+                  onEnterStudio();
+                } else if (onNavigateToRegister) {
+                  onNavigateToRegister();
+                } else {
+                  setAuthMode('login');
+                  setAuthModalOpen(true);
+                }
               }}
               className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold text-xs transition-colors shadow-lg shadow-amber-500/10 whitespace-nowrap"
             >
@@ -145,8 +155,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="pt-2 flex flex-wrap items-center gap-4">
               <button
                 onClick={() => {
-                  if (user) onEnterStudio();
-                  else {
+                  if (user) {
+                    onEnterStudio();
+                  } else if (onNavigateToRegister) {
+                    onNavigateToRegister();
+                  } else {
                     setAuthMode('register');
                     setAuthModalOpen(true);
                   }
