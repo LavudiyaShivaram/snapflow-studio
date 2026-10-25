@@ -1,0 +1,6 @@
+{
+  "name": "SnapFlow Studio",
+  "description": "Premium multi-tenant photography business management SaaS with multi-studio isolation, client management, crew scheduling, shoot deliverables, and financial ledger.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
