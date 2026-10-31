@@ -14,7 +14,7 @@ import { useAuth } from '../../context/AuthContext';
 import { DEMO_PLANS } from '../../lib/mockData';
 
 export const SettingsView: React.FC = () => {
-  const { activeTenant, activeRole, memberships } = useTenant();
+  const { activeTenant, activeRole, memberships, updateTenantInfo } = useTenant();
   const { user } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'general' | 'team' | 'billing'>('general');
@@ -27,11 +27,27 @@ export const SettingsView: React.FC = () => {
   const [currency, setCurrency] = useState(activeTenant?.currency || 'INR');
   const [timezone, setTimezone] = useState(activeTenant?.timezone || 'Asia/Kolkata');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
+    if (!activeTenant) return;
+    setIsSaving(true);
+    try {
+      const currencySymbol = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'GBP' ? '£' : '€';
+      await updateTenantInfo(activeTenant.tenant_id || activeTenant.id!, {
+        name: studioName,
+        currency,
+        currency_symbol: currencySymbol,
+        timezone,
+      });
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 2500);
+    } catch (err) {
+      console.error('Failed to update studio settings:', err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSendInvite = (e: React.FormEvent) => {

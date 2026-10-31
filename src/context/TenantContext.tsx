@@ -125,15 +125,20 @@ interface TenantContextType {
 
   // Mutations
   addClient: (clientData: Omit<Client, 'client_id' | 'id' | 'tenant_id' | 'created_at' | 'updated_at' | 'is_archived'>) => Promise<Client>;
+  updateClient: (clientId: string, updates: Partial<Client>) => Promise<Client>;
   addEvent: (eventData: Omit<Event, 'event_id' | 'id' | 'tenant_id' | 'created_at' | 'updated_at' | 'total_paid' | 'outstanding_balance'>) => Promise<Event>;
+  updateEvent: (eventId: string, updates: Partial<Event>) => Promise<Event>;
   addSession: (sessionData: Omit<EventSession, 'event_session_id' | 'id' | 'tenant_id' | 'created_at'>) => Promise<EventSession>;
   addTeamMember: (memberData: Omit<TeamMember, 'team_member_id' | 'id' | 'tenant_id' | 'created_at'>) => Promise<TeamMember>;
   assignCrew: (assignmentData: Omit<TeamAssignment, 'team_assignment_id' | 'id' | 'tenant_id' | 'created_at' | 'updated_at'>) => Promise<TeamAssignment>;
   recordPayment: (paymentData: Omit<Payment, 'payment_id' | 'id' | 'tenant_id' | 'created_at'>) => Promise<Payment>;
   recordExpense: (expenseData: Omit<Expense, 'expense_id' | 'id' | 'tenant_id' | 'created_at'>) => Promise<Expense>;
   updateEditingStage: (projectId: string, stage: EditingStage) => Promise<void>;
+  createEditingProject: (projectData: Omit<EditingProject, 'editing_project_id' | 'id' | 'tenant_id' | 'created_at' | 'updated_at'>) => Promise<EditingProject>;
   toggleTask: (taskId: string) => Promise<void>;
+  addTask: (taskData: Omit<Task, 'task_id' | 'id' | 'tenant_id' | 'created_at' | 'updated_at'>) => Promise<Task>;
   createQuotation: (quoteData: Omit<Quotation, 'quotation_id' | 'id' | 'tenant_id' | 'created_at' | 'updated_at'>) => Promise<Quotation>;
+  updateTenantInfo: (tenantId: string, updates: Partial<Tenant>) => Promise<Tenant>;
   softDeleteRecord: (entityType: 'clients' | 'events' | 'sessions' | 'team_members' | 'tasks' | 'payments' | 'expenses' | 'packages' | 'quotations', entityId: string) => Promise<void>;
 }
 
@@ -1049,6 +1054,244 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const updateClient = async (clientId: string, updates: Partial<Client>): Promise<Client> => {
+    const now = new Date().toISOString();
+    let updated: Client | null = null;
+
+    setAllClients((prev) =>
+      prev.map((c) => {
+        if (c.id === clientId || c.client_id === clientId) {
+          updated = {
+            ...c,
+            ...updates,
+            updated_by: user?.id || null,
+            updated_date: now,
+            updated_at: now,
+          };
+          return updated;
+        }
+        return c;
+      })
+    );
+
+    if (isSupabaseConfigured && supabase && !isDemoMode && schemaStatus === 'ready') {
+      try {
+        await supabase
+          .from('clients')
+          .update({
+            first_name: updates.first_name,
+            last_name: updates.last_name,
+            partner_first_name: updates.partner_first_name,
+            partner_last_name: updates.partner_last_name,
+            email: updates.email,
+            phone: updates.phone,
+            city: updates.city,
+            state: updates.state,
+            notes: updates.notes,
+            source: updates.source,
+            updated_date: now,
+          })
+          .eq('client_id', clientId);
+      } catch (err) {
+        console.warn('Supabase update client error:', err);
+      }
+    }
+
+    if (!updated) throw new Error(`Client with id ${clientId} not found`);
+    return updated;
+  };
+
+  const updateEvent = async (eventId: string, updates: Partial<Event>): Promise<Event> => {
+    const now = new Date().toISOString();
+    let updated: Event | null = null;
+
+    setAllEvents((prev) =>
+      prev.map((e) => {
+        if (e.id === eventId || e.event_id === eventId) {
+          const newPackagePrice = updates.total_package_price !== undefined ? updates.total_package_price : e.total_package_price;
+          const newOutstanding = Math.max(0, newPackagePrice - (e.total_paid || 0));
+          updated = {
+            ...e,
+            ...updates,
+            total_package_price: newPackagePrice,
+            outstanding_balance: newOutstanding,
+            updated_by: user?.id || null,
+            updated_date: now,
+            updated_at: now,
+          };
+          return updated;
+        }
+        return e;
+      })
+    );
+
+    if (isSupabaseConfigured && supabase && !isDemoMode && schemaStatus === 'ready') {
+      try {
+        await supabase
+          .from('events')
+          .update({
+            title: updates.title,
+            event_type: updates.event_type,
+            status: updates.status,
+            start_date: updates.start_date,
+            end_date: updates.end_date,
+            primary_venue_name: updates.primary_venue_name,
+            primary_venue_address: updates.primary_venue_address,
+            primary_venue_city: updates.primary_venue_city,
+            total_package_price: updates.total_package_price,
+            lead_notes: updates.lead_notes,
+            updated_date: now,
+          })
+          .eq('event_id', eventId);
+      } catch (err) {
+        console.warn('Supabase update event error:', err);
+      }
+    }
+
+    if (!updated) throw new Error(`Event with id ${eventId} not found`);
+    return updated;
+  };
+
+  const createEditingProject = async (
+    projectData: Omit<EditingProject, 'editing_project_id' | 'id' | 'tenant_id' | 'created_at' | 'updated_at'>
+  ): Promise<EditingProject> => {
+    if (!activeTenantKey) throw new Error('No active studio workspace selected');
+    const newId = `ep-${Date.now()}`;
+    const now = new Date().toISOString();
+    const newProject: EditingProject = {
+      ...projectData,
+      editing_project_id: newId,
+      id: newId,
+      tenant_id: activeTenantKey,
+      revision_count: projectData.revision_count || 0,
+      current_stage: projectData.current_stage || 'backup_verified',
+      inserted_by: user?.id || null,
+      inserted_date: now,
+      updated_by: user?.id || null,
+      updated_date: now,
+      deleted_by: null,
+      deleted_date: null,
+      created_at: now,
+      updated_at: now,
+    };
+
+    setAllEditingProjects((prev) => [newProject, ...prev]);
+
+    if (isSupabaseConfigured && supabase && !isDemoMode && schemaStatus === 'ready') {
+      try {
+        await supabase.from('editing_projects').insert([
+          {
+            tenant_id: activeTenantKey,
+            event_id: projectData.event_id,
+            lead_editor_id: projectData.lead_editor_id || null,
+            current_stage: projectData.current_stage || 'backup_verified',
+            deadline_date: projectData.deadline_date,
+            backup_disk_label: projectData.backup_disk_label || null,
+            color_grade_notes: projectData.color_grade_notes || null,
+          },
+        ]);
+      } catch (err) {
+        console.warn('Supabase insert editing project error:', err);
+      }
+    }
+
+    return newProject;
+  };
+
+  const addTask = async (
+    taskData: Omit<Task, 'task_id' | 'id' | 'tenant_id' | 'created_at' | 'updated_at'>
+  ): Promise<Task> => {
+    if (!activeTenantKey) throw new Error('No active studio workspace selected');
+    const newId = `tsk-${Date.now()}`;
+    const now = new Date().toISOString();
+    const newTask: Task = {
+      ...taskData,
+      task_id: newId,
+      id: newId,
+      tenant_id: activeTenantKey,
+      is_completed: false,
+      priority: taskData.priority || 'normal',
+      inserted_by: user?.id || null,
+      inserted_date: now,
+      updated_by: user?.id || null,
+      updated_date: now,
+      deleted_by: null,
+      deleted_date: null,
+      created_at: now,
+      updated_at: now,
+    };
+
+    setAllTasks((prev) => [newTask, ...prev]);
+
+    if (isSupabaseConfigured && supabase && !isDemoMode && schemaStatus === 'ready') {
+      try {
+        await supabase.from('tasks').insert([
+          {
+            tenant_id: activeTenantKey,
+            event_id: taskData.event_id || null,
+            title: taskData.title,
+            description: taskData.description || null,
+            priority: taskData.priority || 'normal',
+            due_date: taskData.due_date || null,
+            is_completed: false,
+          },
+        ]);
+      } catch (err) {
+        console.warn('Supabase insert task error:', err);
+      }
+    }
+
+    return newTask;
+  };
+
+  const updateTenantInfo = async (tenantId: string, updates: Partial<Tenant>): Promise<Tenant> => {
+    const now = new Date().toISOString();
+    let updatedTenant: Tenant | null = null;
+
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.tenant_id === tenantId || t.id === tenantId) {
+          updatedTenant = {
+            ...t,
+            ...updates,
+            updated_by: user?.id || null,
+            updated_date: now,
+            updated_at: now,
+          };
+          return updatedTenant;
+        }
+        return t;
+      })
+    );
+
+    if (isSupabaseConfigured && supabase && !isDemoMode && schemaStatus === 'ready') {
+      try {
+        await supabase
+          .from('tenants')
+          .update({
+            name: updates.name,
+            currency: updates.currency,
+            currency_symbol: updates.currency_symbol,
+            timezone: updates.timezone,
+            date_format: updates.date_format,
+            phone: updates.phone,
+            email: updates.email,
+            website: updates.website,
+            address: updates.address,
+            city: updates.city,
+            country: updates.country,
+            updated_date: now,
+          })
+          .eq('tenant_id', tenantId);
+      } catch (err) {
+        console.warn('Supabase update tenant error:', err);
+      }
+    }
+
+    if (!updatedTenant) throw new Error(`Tenant with id ${tenantId} not found`);
+    return updatedTenant;
+  };
+
   return (
     <TenantContext.Provider
       value={{
@@ -1081,15 +1324,20 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         tasks,
         templates,
         addClient,
+        updateClient,
         addEvent,
+        updateEvent,
         addSession,
         addTeamMember,
         assignCrew,
         recordPayment,
         recordExpense,
         updateEditingStage,
+        createEditingProject,
         toggleTask,
+        addTask,
         createQuotation,
+        updateTenantInfo,
         softDeleteRecord,
       }}
     >

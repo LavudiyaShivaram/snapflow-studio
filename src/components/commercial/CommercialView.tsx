@@ -466,7 +466,8 @@ export const CommercialView: React.FC = () => {
                   onChange={(e) => setPayMethod(e.target.value as any)}
                   className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-amber-400"
                 >
-                  <option value="bank_transfer">Direct Bank Wire / ACH</option>
+                  <option value="bank_transfer">Direct Bank Wire / NEFT / IMPS</option>
+                  <option value="upi">UPI (GPay / PhonePe / Paytm / QR)</option>
                   <option value="credit_card">Credit Card via Portal</option>
                   <option value="stripe">Stripe Online</option>
                   <option value="check">Check</option>

@@ -13,10 +13,17 @@ import { useTenant } from '../../context/TenantContext';
 import { Task } from '../../lib/types';
 
 export const TasksView: React.FC = () => {
-  const { tasks, events, toggleTask, activeTenant } = useTenant();
+  const { tasks, events, toggleTask, addTask, activeTenant } = useTenant();
 
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed'>('pending');
+
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskEventId, setTaskEventId] = useState('');
+  const [taskPriority, setTaskPriority] = useState<'normal' | 'high' | 'urgent'>('normal');
+  const [taskDueDate, setTaskDueDate] = useState('2026-11-20');
+  const [taskDesc, setTaskDesc] = useState('');
 
   const filteredTasks = tasks.filter((t) => {
     if (filterStatus === 'pending' && t.is_completed) return false;
@@ -24,6 +31,22 @@ export const TasksView: React.FC = () => {
     if (filterPriority !== 'all' && t.priority !== filterPriority) return false;
     return true;
   });
+
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskTitle) return;
+    await addTask({
+      title: taskTitle,
+      event_id: taskEventId || undefined,
+      priority: taskPriority,
+      due_date: taskDueDate || new Date().toISOString().split('T')[0],
+      description: taskDesc || undefined,
+      is_completed: false,
+    });
+    setShowAddModal(false);
+    setTaskTitle('');
+    setTaskDesc('');
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -38,6 +61,14 @@ export const TasksView: React.FC = () => {
             <span>Tasks, Gear Checks & Reminders</span>
           </h1>
         </div>
+
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-semibold shadow-lg shadow-amber-500/10 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Task</span>
+        </button>
       </div>
 
       {/* Filter Tabs */}
@@ -158,6 +189,118 @@ export const TasksView: React.FC = () => {
           })
         )}
       </div>
+
+      {/* Add Task Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl text-left">
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+              <h2 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
+                <CheckSquare className="w-5 h-5 text-amber-400" />
+                Add Studio Task or Checklist
+              </h2>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                aria-label="Close dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTask} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
+                  Task Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Clean Sony FX3 sensors & charge V-Mounts"
+                  value={taskTitle}
+                  onChange={(e) => setTaskTitle(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-400/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
+                  Linked Shoot / Event (Optional)
+                </label>
+                <select
+                  value={taskEventId}
+                  onChange={(e) => setTaskEventId(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-amber-400/50"
+                >
+                  <option value="">General Studio Task (No Shoot Linked)</option>
+                  {events.map((evt) => (
+                    <option key={evt.event_id} value={evt.event_id}>
+                      {evt.title} ({evt.start_date})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
+                    Priority
+                  </label>
+                  <select
+                    value={taskPriority}
+                    onChange={(e) => setTaskPriority(e.target.value as any)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-amber-400/50"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
+                    Due Date
+                  </label>
+                  <input
+                    type="date"
+                    value={taskDueDate}
+                    onChange={(e) => setTaskDueDate(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-amber-400/50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono uppercase text-zinc-400 mb-1">
+                  Description / Notes
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Specific instructions, battery specs, or team remarks..."
+                  value={taskDesc}
+                  onChange={(e) => setTaskDesc(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-amber-400/50 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-medium bg-amber-400 text-zinc-950 rounded-lg hover:bg-amber-300 font-semibold transition-colors"
+                >
+                  Save Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

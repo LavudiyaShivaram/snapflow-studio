@@ -164,7 +164,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="space-y-3">
-            {upcomingEvents.map((evt) => {
+            {upcomingEvents.length === 0 ? (
+              <div className="p-8 rounded-xl bg-zinc-900/40 border border-dashed border-zinc-800 text-center">
+                <Calendar className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                <p className="text-sm font-medium text-zinc-300">No upcoming shoots scheduled</p>
+                <p className="text-xs text-zinc-300 mt-1">Book your next client shoot or multi-ceremony wedding.</p>
+                <button
+                  onClick={() => onNavigateTab('events')}
+                  className="mt-3 px-3 py-1.5 bg-amber-400 text-zinc-950 font-semibold rounded-lg text-xs hover:bg-amber-300 transition-colors"
+                >
+                  Schedule New Shoot
+                </button>
+              </div>
+            ) : (
+              upcomingEvents.map((evt) => {
               const evtSessions = sessions.filter((s) => s.event_id === evt.id);
               return (
                 <div
@@ -220,7 +233,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   )}
                 </div>
               );
-            })}
+            })
+          )}
           </div>
         </div>
 

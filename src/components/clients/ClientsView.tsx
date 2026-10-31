@@ -15,10 +15,20 @@ import { useTenant } from '../../context/TenantContext';
 import { Client } from '../../lib/types';
 
 export const ClientsView: React.FC = () => {
-  const { clients, events, payments, quotations, addClient, activeTenant } = useTenant();
+  const { clients, events, payments, quotations, addClient, updateClient, softDeleteRecord, activeTenant } = useTenant();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [isEditingSelected, setIsEditingSelected] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    first_name: '',
+    last_name: '',
+    partner_first_name: '',
+    partner_last_name: '',
+    phone: '',
+    city: '',
+    notes: '',
+  });
   const [showAddModal, setShowAddModal] = useState(false);
 
   // New Client Form state
@@ -422,9 +432,145 @@ export const ClientsView: React.FC = () => {
                 ))}
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+            {isEditingSelected ? (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!selectedClient) return;
+                  const updated = await updateClient(selectedClient.id, editFormData);
+                  setSelectedClient(updated);
+                  setIsEditingSelected(false);
+                }}
+                className="space-y-3 p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-xs"
+              >
+                <div className="font-semibold text-zinc-200">Edit Client Details</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-zinc-400 mb-1">First Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={editFormData.first_name}
+                      onChange={(e) => setEditFormData({ ...editFormData, first_name: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-400 mb-1">Last Name</label>
+                    <input
+                      type="text"
+                      value={editFormData.last_name}
+                      onChange={(e) => setEditFormData({ ...editFormData, last_name: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-100"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-zinc-400 mb-1">Partner First Name</label>
+                    <input
+                      type="text"
+                      value={editFormData.partner_first_name}
+                      onChange={(e) => setEditFormData({ ...editFormData, partner_first_name: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-400 mb-1">Partner Last Name</label>
+                    <input
+                      type="text"
+                      value={editFormData.partner_last_name}
+                      onChange={(e) => setEditFormData({ ...editFormData, partner_last_name: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-100"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-zinc-400 mb-1">Contact Phone</label>
+                    <input
+                      type="text"
+                      value={editFormData.phone}
+                      onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-zinc-400 mb-1">City</label>
+                    <input
+                      type="text"
+                      value={editFormData.city}
+                      onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-100"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1">CRM Notes</label>
+                  <textarea
+                    rows={2}
+                    value={editFormData.notes}
+                    onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                    className="w-full px-2.5 py-1.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-100"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingSelected(false)}
+                    className="px-3 py-1 rounded bg-zinc-800 text-zinc-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
+            <div className="flex items-center justify-between gap-2 pt-3 border-t border-zinc-800">
+              <div className="flex items-center gap-2">
+                {!isEditingSelected && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditFormData({
+                        first_name: selectedClient.first_name,
+                        last_name: selectedClient.last_name,
+                        partner_first_name: selectedClient.partner_first_name || '',
+                        partner_last_name: selectedClient.partner_last_name || '',
+                        phone: selectedClient.phone || '',
+                        city: selectedClient.city || '',
+                        notes: selectedClient.notes || '',
+                      });
+                      setIsEditingSelected(true);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-amber-400 text-xs font-medium"
+                  >
+                    Edit Client
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await softDeleteRecord('clients', selectedClient.id);
+                    setSelectedClient(null);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium border border-red-500/20"
+                >
+                  Archive Client
+                </button>
+              </div>
+
               <button
-                onClick={() => setSelectedClient(null)}
+                onClick={() => {
+                  setSelectedClient(null);
+                  setIsEditingSelected(false);
+                }}
                 className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-200 text-xs font-medium"
               >
                 Close

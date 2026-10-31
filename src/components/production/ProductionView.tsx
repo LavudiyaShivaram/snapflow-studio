@@ -9,6 +9,7 @@ import {
   Layers,
   ArrowRight,
   Sparkles,
+  X,
 } from 'lucide-react';
 import { useTenant } from '../../context/TenantContext';
 import { EditingStage, EditingProject } from '../../lib/types';
@@ -26,11 +27,17 @@ const STAGES: { id: EditingStage; label: string; step: number }[] = [
 ];
 
 export const ProductionView: React.FC = () => {
-  const { editingProjects, events, teamMembers, updateEditingStage, activeTenant } = useTenant();
+  const { editingProjects, events, teamMembers, updateEditingStage, createEditingProject, activeTenant } = useTenant();
 
   const [selectedProject, setSelectedProject] = useState<EditingProject | null>(
     editingProjects[0] || null
   );
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [formEventId, setFormEventId] = useState(events[0]?.id || '');
+  const [formEditorId, setFormEditorId] = useState(teamMembers[0]?.id || '');
+  const [formDeadline, setFormDeadline] = useState('2026-12-15');
+  const [formDiskLabel, setFormDiskLabel] = useState('');
+  const [formColorNotes, setFormColorNotes] = useState('');
 
   const getStageIndex = (stage: EditingStage) => {
     return STAGES.findIndex((s) => s.id === stage);
@@ -47,6 +54,24 @@ export const ProductionView: React.FC = () => {
     }
   };
 
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formEventId) return;
+    const newProj = await createEditingProject({
+      event_id: formEventId,
+      lead_editor_id: formEditorId || null,
+      current_stage: 'backup_verified',
+      deadline_date: formDeadline,
+      backup_disk_label: formDiskLabel || null,
+      color_grade_notes: formColorNotes || null,
+      revision_count: 0,
+    });
+    setSelectedProject(newProj);
+    setShowCreateModal(false);
+    setFormDiskLabel('');
+    setFormColorNotes('');
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Title & Action Bar */}
@@ -60,6 +85,17 @@ export const ProductionView: React.FC = () => {
             <span>Editing Pipeline & Client Deliverables</span>
           </h1>
         </div>
+
+        <button
+          onClick={() => {
+            if (events.length > 0) setFormEventId(events[0].id);
+            if (teamMembers.length > 0) setFormEditorId(teamMembers[0].id);
+            setShowCreateModal(true);
+          }}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-semibold shadow-lg shadow-amber-500/10 transition-colors"
+        >
+          <span>Start Editing Project</span>
+        </button>
       </div>
 
       {/* Pipeline Stage Bar */}
@@ -82,7 +118,22 @@ export const ProductionView: React.FC = () => {
 
       {/* Editing Projects Cards */}
       <div className="space-y-4">
-        {editingProjects.map((project) => {
+        {editingProjects.length === 0 ? (
+          <div className="p-8 text-center rounded-xl bg-zinc-900/40 border border-zinc-800 text-xs text-zinc-400 space-y-3">
+            <p>No active post-production pipelines currently tracked for this studio.</p>
+            <button
+              onClick={() => {
+                if (events.length > 0) setFormEventId(events[0].id);
+                if (teamMembers.length > 0) setFormEditorId(teamMembers[0].id);
+                setShowCreateModal(true);
+              }}
+              className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold"
+            >
+              Start Your First Editing Project
+            </button>
+          </div>
+        ) : (
+        editingProjects.map((project) => {
           const evt = events.find((e) => e.id === project.event_id);
           const editor = teamMembers.find((m) => m.id === project.lead_editor_id);
           const currentStageIndex = getStageIndex(project.current_stage);
@@ -191,8 +242,107 @@ export const ProductionView: React.FC = () => {
               )}
             </div>
           );
-        })}
+        })
+        )}
       </div>
+
+      {/* Start Project Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <h3 className="text-base font-semibold text-zinc-100">Initialize Post-Production Project</h3>
+              <button onClick={() => setShowCreateModal(false)} className="text-zinc-400 hover:text-zinc-200">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateProject} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-zinc-400 mb-1">Select Event Booking *</label>
+                <select
+                  required
+                  value={formEventId}
+                  onChange={(e) => setFormEventId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-amber-400"
+                >
+                  {events.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.title} ({e.start_date})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Lead Colorist / Editor</label>
+                <select
+                  value={formEditorId}
+                  onChange={(e) => setFormEditorId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-amber-400"
+                >
+                  <option value="">Unassigned</option>
+                  {teamMembers.map((tm) => (
+                    <option key={tm.id} value={tm.id}>
+                      {tm.name} ({tm.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1">Target Delivery Deadline *</label>
+                  <input
+                    type="date"
+                    required
+                    value={formDeadline}
+                    onChange={(e) => setFormDeadline(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 mb-1">Backup Disk / NAS Label</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. RAID-ARRAY-HYD-01"
+                    value={formDiskLabel}
+                    onChange={(e) => setFormDiskLabel(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Color Grade & Aesthetic Brief</label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Rich warm South Indian gold palette, natural skin highlights"
+                  value={formColorNotes}
+                  onChange={(e) => setFormColorNotes(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold"
+                >
+                  Start Project
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

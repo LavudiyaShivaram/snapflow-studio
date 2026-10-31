@@ -17,7 +17,7 @@ async function testConnection() {
     // 2. Test PostgreSQL database REST reachability
     const { data: tenants, error: tenantsError } = await client
       .from('tenants')
-      .select('tenant_id, business_name, slug')
+      .select('tenant_id, name, slug')
       .limit(5);
 
     console.log('Tenants table query:', {
